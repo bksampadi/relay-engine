@@ -33,6 +33,9 @@ public class DeliveryRepository {
                             webhook_endpoint_id,
                             payload,
                             status,
+                            attempt_count,
+                            next_attempt_at,
+                            lease_until,
                             created_at,
                             updated_at
                         """)
@@ -49,6 +52,9 @@ public class DeliveryRepository {
                     webhook_endpoint_id,
                     payload,
                     status,
+                    attempt_count,
+                    next_attempt_at,
+                    lease_until,
                     created_at,
                     updated_at
                 FROM deliveries
@@ -62,11 +68,20 @@ public class DeliveryRepository {
     private static Delivery mapRow(ResultSet resultSet, int rowNum)
             throws SQLException {
 
+        OffsetDateTime leaseUntil =
+                resultSet.getObject("lease_until", OffsetDateTime.class);
+
         return new Delivery(
                 resultSet.getLong("id"),
                 resultSet.getLong("webhook_endpoint_id"),
                 resultSet.getString("payload"),
                 DeliveryStatus.valueOf(resultSet.getString("status")),
+                resultSet.getInt("attempt_count"),
+                resultSet.getObject(
+                        "next_attempt_at",
+                        OffsetDateTime.class
+                ).toInstant(),
+                leaseUntil == null ? null : leaseUntil.toInstant(),
                 resultSet.getObject(
                         "created_at",
                         OffsetDateTime.class

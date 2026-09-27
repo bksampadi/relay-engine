@@ -7,6 +7,9 @@ public record Delivery(
         long webhookEndpointId,
         String payload,
         DeliveryStatus status,
+        int attemptCount,
+        Instant nextAttemptAt,
+        Instant leaseUntil,
         Instant createdAt,
         Instant updatedAt
 ) {

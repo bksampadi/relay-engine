@@ -45,6 +45,9 @@ class DeliveryRepositoryTest {
         assertThat(delivery.payload()).contains("payment_id");
         assertThat(delivery.createdAt()).isNotNull();
         assertThat(delivery.updatedAt()).isNotNull();
+        assertThat(delivery.attemptCount()).isZero();
+        assertThat(delivery.nextAttemptAt()).isNotNull();
+        assertThat(delivery.leaseUntil()).isNull();
     }
 
     @Test
