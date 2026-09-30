@@ -116,6 +116,117 @@ class DeliveryRepositoryTest {
   }
 
   @Test
+  void reschedulesProcessingDelivery() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("payments", "https://example.com/webhooks/payments");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                                {"event":"payment.failed","payment_id":"pay_retry"}
+                                """);
+
+    Delivery claimed = deliveryRepository.claimNextReady(Duration.ofSeconds(30)).orElseThrow();
+
+    Optional<Delivery> result = deliveryRepository.reschedule(claimed.id(), Duration.ofSeconds(30));
+
+    assertThat(result).isPresent();
+
+    Delivery rescheduled = result.orElseThrow();
+
+    assertThat(rescheduled.id()).isEqualTo(pending.id());
+    assertThat(rescheduled.status()).isEqualTo(DeliveryStatus.PENDING);
+    assertThat(rescheduled.attemptCount()).isEqualTo(1);
+    assertThat(rescheduled.leaseUntil()).isNull();
+    assertThat(Duration.between(rescheduled.updatedAt(), rescheduled.nextAttemptAt()))
+        .isEqualTo(Duration.ofSeconds(30));
+
+    Delivery persisted = deliveryRepository.findById(pending.id()).orElseThrow();
+
+    assertThat(persisted.status()).isEqualTo(DeliveryStatus.PENDING);
+    assertThat(persisted.attemptCount()).isEqualTo(1);
+    assertThat(persisted.leaseUntil()).isNull();
+  }
+
+  @Test
+  void doesNotReschedulePendingDelivery() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("orders", "https://example.com/webhooks/orders");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                                {"event":"order.created","order_id":"ord_pending"}
+                                """);
+
+    Optional<Delivery> result = deliveryRepository.reschedule(pending.id(), Duration.ofSeconds(30));
+
+    assertThat(result).isEmpty();
+
+    Delivery persisted = deliveryRepository.findById(pending.id()).orElseThrow();
+
+    assertThat(persisted.status()).isEqualTo(DeliveryStatus.PENDING);
+    assertThat(persisted.attemptCount()).isZero();
+    assertThat(persisted.leaseUntil()).isNull();
+  }
+
+  @Test
+  void marksProcessingDeliverySucceeded() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("payments", "https://example.com/webhooks/payments");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                                {"event":"payment.completed","payment_id":"pay_success"}
+                                """);
+
+    Delivery claimed = deliveryRepository.claimNextReady(Duration.ofSeconds(30)).orElseThrow();
+
+    Optional<Delivery> result = deliveryRepository.markSucceeded(claimed.id());
+
+    assertThat(result).isPresent();
+
+    Delivery succeeded = result.orElseThrow();
+
+    assertThat(succeeded.id()).isEqualTo(pending.id());
+    assertThat(succeeded.status()).isEqualTo(DeliveryStatus.SUCCEEDED);
+    assertThat(succeeded.attemptCount()).isEqualTo(1);
+    assertThat(succeeded.leaseUntil()).isNull();
+
+    Delivery persisted = deliveryRepository.findById(pending.id()).orElseThrow();
+
+    assertThat(persisted.status()).isEqualTo(DeliveryStatus.SUCCEEDED);
+    assertThat(persisted.attemptCount()).isEqualTo(1);
+    assertThat(persisted.leaseUntil()).isNull();
+  }
+
+  @Test
+  void doesNotMarkPendingDeliverySucceeded() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("orders", "https://example.com/webhooks/orders");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                                {"event":"order.created","order_id":"ord_not_claimed"}
+                                """);
+
+    Optional<Delivery> result = deliveryRepository.markSucceeded(pending.id());
+
+    assertThat(result).isEmpty();
+
+    Delivery persisted = deliveryRepository.findById(pending.id()).orElseThrow();
+
+    assertThat(persisted.status()).isEqualTo(DeliveryStatus.PENDING);
+    assertThat(persisted.attemptCount()).isZero();
+  }
+
+  @Test
   void returnsEmptyWhenNoDeliveryIsReady() {
     Optional<Delivery> result = deliveryRepository.claimNextReady(Duration.ofSeconds(30));
 

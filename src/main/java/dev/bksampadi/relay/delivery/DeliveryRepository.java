@@ -106,6 +106,60 @@ public class DeliveryRepository {
         .optional();
   }
 
+  public Optional<Delivery> reschedule(long id, Duration delay) {
+    return jdbcClient
+        .sql(
+            """
+                            UPDATE deliveries
+                            SET status = 'PENDING',
+                              next_attempt_at = NOW() + (:delaySeconds * INTERVAL '1 second'),
+                              lease_until = NULL,
+                              updated_at = NOW()
+                            WHERE id = :id
+                              AND status = 'PROCESSING'
+                            RETURNING
+                              id,
+                              webhook_endpoint_id,
+                              payload,
+                              status,
+                              attempt_count,
+                              next_attempt_at,
+                              lease_until,
+                              created_at,
+                              updated_at
+                    """)
+        .param("id", id)
+        .param("delaySeconds", delay.toSeconds())
+        .query(DeliveryRepository::mapRow)
+        .optional();
+  }
+
+  public Optional<Delivery> markSucceeded(long id) {
+    return jdbcClient
+        .sql(
+            """
+                        UPDATE deliveries
+                        SET status = 'SUCCEEDED',
+                            lease_until = NULL,
+                            updated_at = NOW()
+                        WHERE id = :id
+                            AND status = 'PROCESSING'
+                        RETURNING
+                            id,
+                            webhook_endpoint_id,
+                            payload,
+                            status,
+                            attempt_count,
+                            next_attempt_at,
+                            lease_until,
+                            created_at,
+                            updated_at
+                        """)
+        .param("id", id)
+        .query(DeliveryRepository::mapRow)
+        .optional();
+  }
+
   private static Delivery mapRow(ResultSet resultSet, int rowNum) throws SQLException {
 
     OffsetDateTime leaseUntil = resultSet.getObject("lease_until", OffsetDateTime.class);
