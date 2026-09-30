@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.Optional;
+import java.time.Duration;
 
 @Repository
 public class DeliveryRepository {
@@ -61,6 +62,40 @@ public class DeliveryRepository {
                 WHERE id = :id
                 """)
                 .param("id", id)
+                .query(DeliveryRepository::mapRow)
+                .optional();
+    }
+
+    public Optional<Delivery> claimNextReady(Duration leaseDuration) {
+        return jdbcClient.sql("""
+                WITH next_delivery AS (
+                    SELECT id
+                    FROM deliveries
+                    WHERE status = 'PENDING'
+                        AND next_attempt_at <= NOW()
+                    ORDER BY next_attempt_at, id
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
+                )
+                UPDATE deliveries d
+                SET status = 'PROCESSING',
+                    attempt_count = d.attempt_count +1,
+                    lease_until = NOW() + (:leaseSeconds * INTERVAL '1 second'),
+                    updated_at = NOW()
+                FROM next_delivery
+                WHERE d.id = next_delivery.id
+                RETURNING
+                    d.id,
+                    d.webhook_endpoint_id,
+                    d.payload,
+                    d.status,
+                    d.attempt_count,
+                    d.next_attempt_at,
+                    d.lease_until,
+                    d.created_at,
+                    d.updated_at
+                """)
+                .param("leaseSeconds", leaseDuration.toSeconds())
                 .query(DeliveryRepository::mapRow)
                 .optional();
     }

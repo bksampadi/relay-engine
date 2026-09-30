@@ -10,6 +10,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.time.Duration;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -86,6 +88,52 @@ class DeliveryRepositoryTest {
     void returnsEmptyWhenDeliveryDoesNotExist() {
         Optional<Delivery> result =
                 deliveryRepository.findById(Long.MAX_VALUE);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void claimsNextReadyDelivery() {
+        WebhookEndpoint endpoint = webhookEndpointRepository.create(
+                "payments",
+                "https://example.com/webhooks/payments"
+        );
+
+        Delivery pending = deliveryRepository.createPending(
+                endpoint.id(),
+                """
+                        {"event":"payment.completed","payment_id":"pay_789"}
+                        """
+        );
+
+        Instant beforeClaim = Instant.now();
+
+        Optional<Delivery> result =
+                deliveryRepository.claimNextReady(Duration.ofSeconds(30));
+
+        assertThat(result).isPresent();
+
+        Delivery claimed = result.orElseThrow();
+
+        assertThat(claimed.id()).isEqualTo(pending.id());
+        assertThat(claimed.status()).isEqualTo(DeliveryStatus.PROCESSING);
+        assertThat(claimed.attemptCount()).isEqualTo(1);
+        assertThat(claimed.leaseUntil()).isNotNull();
+        assertThat(claimed.leaseUntil()).isAfter(beforeClaim);
+
+        Delivery persisted =
+                deliveryRepository.findById(pending.id()).orElseThrow();
+
+        assertThat(persisted.status())
+                .isEqualTo(DeliveryStatus.PROCESSING);
+        assertThat(persisted.attemptCount()).isEqualTo(1);
+        assertThat(persisted.leaseUntil()).isNotNull();
+    }
+
+    @Test
+    void returnsEmptyWhenNoDeliveryIsReady() {
+        Optional<Delivery> result =
+                deliveryRepository.claimNextReady(Duration.ofSeconds(30));
 
         assertThat(result).isEmpty();
     }
