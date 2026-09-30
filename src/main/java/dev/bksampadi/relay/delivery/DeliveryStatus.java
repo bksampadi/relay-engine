@@ -1,8 +1,8 @@
 package dev.bksampadi.relay.delivery;
 
 public enum DeliveryStatus {
-    PENDING,
-    PROCESSING,
-    SUCCEEDED,
-    FAILED,
+  PENDING,
+  PROCESSING,
+  SUCCEEDED,
+  FAILED,
 }

@@ -6,8 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class RelayEngineApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(RelayEngineApplication.class, args);
-	}
-
+  public static void main(String[] args) {
+    SpringApplication.run(RelayEngineApplication.class, args);
+  }
 }
