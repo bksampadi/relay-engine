@@ -3,7 +3,7 @@
 ![Java 21](https://img.shields.io/badge/Java-21-596675?style=flat-square)
 ![Spring Boot 4](https://img.shields.io/badge/Spring%20Boot-4-74866F?style=flat-square)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-5F7390?style=flat-square)
-![CI](https://img.shields.io/github/actions/workflow/status/bksampadi/relay-engine/maven.yml?branch=main&style=flat-square&label=CI)
+![CI](https://img.shields.io/github/actions/workflow/status/bksampadi/relay-engine/ci.yml?branch=main&style=flat-square&label=CI)
 
 Durable webhook delivery in Java and Spring Boot.
 
