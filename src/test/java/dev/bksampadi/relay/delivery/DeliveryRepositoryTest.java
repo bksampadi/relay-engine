@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
@@ -22,6 +23,8 @@ class DeliveryRepositoryTest {
   @Autowired private DeliveryRepository deliveryRepository;
 
   @Autowired private WebhookEndpointRepository webhookEndpointRepository;
+
+  @Autowired private JdbcClient jdbcClient;
 
   @Test
   void createsPendingDelivery() {
@@ -231,5 +234,67 @@ class DeliveryRepositoryTest {
     Optional<Delivery> result = deliveryRepository.claimNextReady(Duration.ofSeconds(30));
 
     assertThat(result).isEmpty();
+  }
+
+  @Test
+  void reclaimsDeliveryWithExpiredLease() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("payments", "https://example.com/webhooks/payments");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                    {"event":"payment.completed","payment_id":"pay_expired_lease"}
+                    """);
+
+    Delivery firstClaim = deliveryRepository.claimNextReady(Duration.ofSeconds(30)).orElseThrow();
+
+    assertThat(firstClaim.id()).isEqualTo(pending.id());
+    assertThat(firstClaim.attemptCount()).isEqualTo(1);
+
+    jdbcClient
+        .sql(
+            """
+                    UPDATE deliveries
+                    SET lease_until = NOW() - INTERVAL '1 second'
+                    WHERE id = :id
+                    """)
+        .param("id", pending.id())
+        .update();
+
+    Instant beforeReclaim = Instant.now();
+
+    Optional<Delivery> result = deliveryRepository.claimNextReady(Duration.ofSeconds(30));
+
+    assertThat(result).isPresent();
+
+    Delivery reclaimed = result.orElseThrow();
+
+    assertThat(reclaimed.id()).isEqualTo(pending.id());
+    assertThat(reclaimed.status()).isEqualTo(DeliveryStatus.PROCESSING);
+    assertThat(reclaimed.attemptCount()).isEqualTo(2);
+    assertThat(reclaimed.leaseUntil()).isAfter(beforeReclaim);
+  }
+
+  @Test
+  void doesNotReclaimDeliveryWithActiveLease() {
+    WebhookEndpoint endpoint =
+        webhookEndpointRepository.create("payments", "https://example.com/webhooks/payments");
+
+    Delivery pending =
+        deliveryRepository.createPending(
+            endpoint.id(),
+            """
+                    {"event":"payment.completed"}
+                    """);
+
+    Delivery firstClaim = deliveryRepository.claimNextReady(Duration.ofSeconds(30)).orElseThrow();
+
+    assertThat(firstClaim.id()).isEqualTo(pending.id());
+
+    Optional<Delivery> secondClaim = deliveryRepository.claimNextReady(Duration.ofSeconds(30));
+
+    assertThat(secondClaim).isEmpty();
   }
 }

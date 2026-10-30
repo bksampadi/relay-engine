@@ -77,8 +77,14 @@ public class DeliveryRepository {
                 WITH next_delivery AS (
                     SELECT id
                     FROM deliveries
-                    WHERE status = 'PENDING'
-                        AND next_attempt_at <= NOW()
+                    WHERE (
+                            status = 'PENDING'
+                            AND next_attempt_at <= NOW()
+                           )
+                        OR (
+                          status = 'PROCESSING'
+                          AND lease_until <= NOW()
+                          )
                     ORDER BY next_attempt_at, id
                     FOR UPDATE SKIP LOCKED
                     LIMIT 1
